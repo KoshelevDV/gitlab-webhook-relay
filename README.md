@@ -162,3 +162,169 @@ const HANDLERS = {
 ## License
 
 MIT
+
+---
+
+# gitlab-webhook-relay (Русский)
+
+Лёгкий Node.js-мост, который преобразует события GitLab webhook в запросы к агенту [OpenClaw](https://openclaw.ai).
+
+Когда в GitLab открывается или переоткрывается Merge Request, relay получает вебхук, формирует промпт для code review и передаёт его в OpenClaw `/hooks/agent`. Изолированный AI-агент скачивает diff, проверяет код и оставляет комментарий прямо в МР.
+
+```
+GitLab  ──webhook──▶  nginx  ──proxy──▶  relay  ──agent──▶  OpenClaw
+                                                                  │
+                      комментарий  ◀─── GitLab API  ◀────────────┘
+```
+
+## Возможности
+
+- **Нет зависимостей** — только stdlib (Node.js 18+)
+- **Конфигурация через переменные окружения** — никаких секретов в коде
+- **Health check** эндпоинт (`GET /health`)
+- **Пример nginx** для запуска за reverse proxy
+- **Systemd сервис** + **Docker / docker-compose**
+- Легко расширяется: добавляй новые обработчики событий GitLab в `HANDLERS`
+
+## Требования
+
+- Node.js 18+ (ESM)
+- [OpenClaw](https://openclaw.ai) с включённым `hooks.enabled: true`
+- GitLab (self-hosted или cloud)
+
+## Быстрый старт
+
+### 1. Клонировать и настроить
+
+```bash
+git clone https://github.com/YOUR_ORG/gitlab-webhook-relay.git
+cd gitlab-webhook-relay
+cp .env.example .env
+$EDITOR .env
+```
+
+Заполнить `.env`:
+
+| Переменная | Описание |
+|---|---|
+| `GITLAB_WEBHOOK_SECRET` | Секрет, который будет задан в настройках вебхука GitLab |
+| `OPENCLAW_HOOKS_URL` | URL эндпоинта OpenClaw, например `http://127.0.0.1:18789/hooks/agent` |
+| `OPENCLAW_HOOKS_TOKEN` | Токен из `hooks.token` в `openclaw.json` |
+| `TELEGRAM_CHAT_ID` | (Опционально) Telegram chat ID для доставки результатов ревью |
+| `HOST` | Адрес для прослушивания (по умолчанию: `127.0.0.1`) |
+| `PORT` | Порт (по умолчанию: `9091`) |
+
+### 2. Настроить OpenClaw
+
+В `openclaw.json` (или через `config.patch`):
+
+```json
+{
+  "hooks": {
+    "enabled": true,
+    "token": "YOUR_OPENCLAW_HOOKS_TOKEN",
+    "path": "/hooks"
+  }
+}
+```
+
+### 3. Запустить
+
+```bash
+node index.js
+```
+
+Проверить работу:
+
+```bash
+curl http://localhost:9091/health
+# {"ok":true,"ts":1234567890}
+```
+
+## Деплой
+
+### Вариант А: systemd (рекомендуется для bare-metal)
+
+```bash
+cp deploy/gitlab-webhook-relay.service /etc/systemd/system/
+$EDITOR /etc/systemd/system/gitlab-webhook-relay.service  # указать User= и пути
+
+systemctl daemon-reload
+systemctl enable --now gitlab-webhook-relay
+journalctl -u gitlab-webhook-relay -f
+```
+
+### Вариант Б: Docker
+
+```bash
+cp .env.example .env && $EDITOR .env
+docker compose up -d
+```
+
+> **Важно:** Если OpenClaw запущен на хосте, раскомментируй `extra_hosts` в `docker-compose.yml`
+> и используй `http://host.docker.internal:18789/hooks/agent` как `OPENCLAW_HOOKS_URL`.
+
+### Nginx reverse proxy (рекомендуется)
+
+Используй шаблон из `deploy/nginx.conf.example`. Он:
+- Принимает соединения только на внутреннем сетевом интерфейсе
+- Проверяет `X-Gitlab-Token` до проксирования
+- Блокирует все остальные пути
+
+```bash
+cp deploy/nginx.conf.example /etc/nginx/conf.d/gitlab-webhook-relay.conf
+$EDITOR /etc/nginx/conf.d/gitlab-webhook-relay.conf  # указать IP и секрет
+nginx -t && systemctl reload nginx
+```
+
+**На Fedora / SELinux** разрешить nginx подключаться к localhost:
+
+```bash
+setsebool -P httpd_can_network_connect on
+semanage port -a -t http_port_t -p tcp 9090  # или нужный порт
+```
+
+## Настройка вебхука в GitLab
+
+1. Перейти в проект → **Settings → Webhooks**
+2. Добавить новый вебхук:
+   - **URL:** `http://YOUR_HOST:9090/webhook` (через nginx) или `http://YOUR_HOST:9091/webhook` (напрямую)
+   - **Secret token:** значение `GITLAB_WEBHOOK_SECRET`
+   - **Triggers:** ✅ Merge request events
+   - **SSL verification:** отключить при использовании HTTP
+
+> **Self-hosted GitLab:** если GitLab блокирует вебхуки на приватные IP, зайди в  
+> **Admin Area → Settings → Network → Outbound requests** и добавь свой хост в allowlist.
+
+## Как работает ревью
+
+При открытии или переоткрытии МР:
+
+1. Relay получает вебхук, проверяет секрет, извлекает метаданные МР
+2. Формирует структурированный промпт с ID проекта, номером МР, ветками
+3. Отправляет в OpenClaw `/hooks/agent` → запускается изолированная сессия агента
+4. Агент скачивает diff через GitLab API с твоим токеном
+5. Проверяет код: архитектура, безопасность, стиль, баги
+6. Оставляет комментарий прямо в МРе через GitLab API
+7. Отправляет краткое резюме в настроенный Telegram-чат (если задан)
+
+## Расширение
+
+Добавляй новые обработчики событий в `index.js`:
+
+```js
+// Обработка push событий
+function buildPushMessage(payload) {
+  if (payload.ref !== "refs/heads/main") return null;
+  return `Новый push в main в ${payload.project.name}. Проверь на наличие проблем.`;
+}
+
+const HANDLERS = {
+  merge_request: buildMrMessage,
+  push:          buildPushMessage,  // ← добавить здесь
+};
+```
+
+## Лицензия
+
+MIT
