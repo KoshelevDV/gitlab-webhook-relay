@@ -50,7 +50,12 @@ function buildMrMessage(payload) {
   const apiBase = `${new URL(mr.url).origin}/api/v4`;
 
   const isUpdate = mr.action === "update";
-  const isOwnMr = (payload.user?.username === "afflictus" || payload.user?.name === "Afflictus");
+  // GitLab account username is "openclaw"; display name may vary
+  const isOwnMr = (
+    payload.user?.username === "afflictus" ||
+    payload.user?.username === "openclaw" ||
+    payload.user?.name === "Afflictus"
+  );
   const isFullCycleApproved = FULL_CYCLE_PROJECTS.has(project.id);
   const fullCycleEnabled = isOwnMr && isFullCycleApproved;
 
