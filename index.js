@@ -37,6 +37,9 @@ const config = {
   host:           process.env.HOST || "127.0.0.1",
   gitlabSecret:   required("GITLAB_WEBHOOK_SECRET"),
   gitlabToken:    required("GITLAB_TOKEN"),
+  // Explicit GitLab API base — avoids HTTP→HTTPS redirect issues
+  // Falls back to deriving from the MR URL if not set
+  gitlabApiUrl:   process.env.GITLAB_API_URL || "",
   openclawUrl:    required("OPENCLAW_HOOKS_URL"),
   openclawToken:  required("OPENCLAW_HOOKS_TOKEN"),
   telegramChatId: process.env.TELEGRAM_CHAT_ID || "",
@@ -148,7 +151,7 @@ async function buildMrMessage(payload) {
   const isFullCycleApproved = FULL_CYCLE_PROJECTS.has(project.id);
   const fullCycleEnabled = isOwnMr && isFullCycleApproved;
 
-  const apiBase = `${new URL(mr.url).origin}/api/v4`;
+  const apiBase = config.gitlabApiUrl || `${new URL(mr.url).origin}/api/v4`;
 
   // Skip if agent already approved this MR
   const alreadyApproved = await isMrApprovedByAgent(apiBase, project.id, mr.iid);
