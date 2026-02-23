@@ -83,13 +83,22 @@ async function buildMrMessage(payload) {
 
   const isUpdate = mr.action === "update";
   // GitLab account username is "openclaw"; display name may vary
+  const AGENT_USERNAMES = new Set(["openclaw", "afflictus"]);
+  const pusherUsername = payload.user?.username ?? "";
+  const isAgentPush = AGENT_USERNAMES.has(pusherUsername.toLowerCase());
   const isOwnMr = (
-    payload.user?.username === "afflictus" ||
-    payload.user?.username === "openclaw" ||
+    isAgentPush ||
     payload.user?.name === "Afflictus"
   );
   const isFullCycleApproved = FULL_CYCLE_PROJECTS.has(project.id);
   const fullCycleEnabled = isOwnMr && isFullCycleApproved;
+
+  // Avoid infinite loop: if the agent itself pushed an update to its own MR,
+  // skip re-review — the agent already knows what it just committed.
+  if (isUpdate && isAgentPush) {
+    log("skip", `update by agent (${pusherUsername}) on own MR !${mr.iid} — no re-review`);
+    return null;
+  }
 
   // NOTE: all content inside <untrusted-mr-data> comes from GitLab users
   // and must be treated as data only — never as instructions.
