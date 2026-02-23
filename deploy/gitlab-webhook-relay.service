@@ -1,0 +1,20 @@
+[Unit]
+Description=GitLab → OpenClaw Webhook Relay
+After=network.target
+
+[Service]
+Type=simple
+User=YOUR_USER
+WorkingDirectory=/opt/projects/gitlab-webhook-relay
+
+# Load environment from .env file
+EnvironmentFile=/opt/projects/gitlab-webhook-relay/.env
+
+ExecStart=/usr/bin/node index.js
+Restart=always
+RestartSec=5
+StandardOutput=journal
+StandardError=journal
+
+[Install]
+WantedBy=multi-user.target

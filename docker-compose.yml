@@ -1,0 +1,12 @@
+services:
+  relay:
+    build: .
+    restart: unless-stopped
+    # Listen on loopback only — put nginx/caddy in front
+    ports:
+      - "127.0.0.1:9091:9091"
+    env_file:
+      - .env
+    # If OpenClaw runs on the host, use host networking or host.docker.internal
+    # extra_hosts:
+    #   - "host.docker.internal:host-gateway"
