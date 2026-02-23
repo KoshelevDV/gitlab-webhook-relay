@@ -7,7 +7,10 @@
 
 import http from "http";
 import https from "https";
-import { readFileSync } from "fs";
+import { exec } from "child_process";
+import { promisify } from "util";
+
+const execAsync = promisify(exec);
 
 // ─── Projects approved for full cycle mode (review + apply fixes) ────────────
 // Add project IDs here only after explicit confirmation from the owner.
@@ -36,11 +39,34 @@ const config = {
   timeoutSeconds: parseInt(process.env.TIMEOUT_SECONDS || "300"),
 };
 
+// ─── Semantic memory recall ───────────────────────────────────────────────────
+
+const MCPORTER = process.env.MCPORTER_BIN || "/home/user/.npm-global/bin/mcporter";
+
+async function recallContext(query, topK = 5) {
+  try {
+    const args = JSON.stringify({ query, top_k: topK });
+    const { stdout } = await execAsync(
+      `${MCPORTER} call semantic.recall --args '${args}'`,
+      { timeout: 8000 }
+    );
+    const results = JSON.parse(stdout);
+    if (!results?.length) return "";
+
+    return results
+      .map((r) => `[${r.category}] ${r.text}`)
+      .join("\n");
+  } catch (err) {
+    log("recall-error", err.message);
+    return ""; // не блокируем ревью если Qdrant недоступен
+  }
+}
+
 // ─── Message builder ─────────────────────────────────────────────────────────
 
 const TRIGGER_ACTIONS = new Set(["open", "reopen", "update"]);
 
-function buildMrMessage(payload) {
+async function buildMrMessage(payload) {
   const mr      = payload.object_attributes;
   const project = payload.project;
   const author  = payload.user?.name || "Unknown";
@@ -48,6 +74,12 @@ function buildMrMessage(payload) {
   if (!TRIGGER_ACTIONS.has(mr.action)) return null;
 
   const apiBase = `${new URL(mr.url).origin}/api/v4`;
+
+  // Fetch infra context from semantic memory (non-blocking — empty string if unavailable)
+  const memoryContext = await recallContext(
+    `${project.path_with_namespace} infrastructure code review workflow`,
+    6
+  );
 
   const isUpdate = mr.action === "update";
   // GitLab account username is "openclaw"; display name may vary
@@ -85,6 +117,7 @@ MR      : #${mr.iid}
 Branch  : ${mr.source_branch} → ${mr.target_branch}
 Author  : ${author}
 URL     : ${mr.url}
+${memoryContext ? `\n--- Infrastructure context (from semantic memory) ---\n${memoryContext}\n--- End of infra context ---` : ""}
 
 <untrusted-mr-data>
 Title      : ${mr.title}
@@ -112,7 +145,7 @@ const HANDLERS = {
   merge_request: buildMrMessage,
 };
 
-function buildMessage(payload) {
+async function buildMessage(payload) {
   const handler = HANDLERS[payload.object_kind];
   return handler ? handler(payload) : null;
 }
@@ -194,7 +227,7 @@ const server = http.createServer(async (req, res) => {
     return res.end("Invalid JSON");
   }
 
-  const message = buildMessage(payload);
+  const message = await buildMessage(payload);
   if (!message) {
     log("skip", payload.object_kind, payload.object_attributes?.action ?? "—");
     res.writeHead(200);
