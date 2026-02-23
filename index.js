@@ -87,8 +87,9 @@ async function gitlabGet(url, token) {
 // ─── Approval check ───────────────────────────────────────────────────────────
 
 /**
- * Returns true if the agent already approved this MR.
- * Uses GET /projects/:id/merge_requests/:iid/approvals
+ * Returns true if the agent (token owner) already approved this MR.
+ * Uses `user_has_approved` from GET /projects/:id/merge_requests/:iid/approvals
+ * — this field is always relative to the token owner, regardless of bot username.
  */
 async function isMrApprovedByAgent(apiBase, projectId, mrIid) {
   try {
@@ -96,10 +97,7 @@ async function isMrApprovedByAgent(apiBase, projectId, mrIid) {
       `${apiBase}/projects/${projectId}/merge_requests/${mrIid}/approvals`,
       config.gitlabToken,
     );
-    const approvedBy = data?.approved_by ?? [];
-    return approvedBy.some((a) =>
-      AGENT_USERNAMES.has(a.user?.username?.toLowerCase() ?? ""),
-    );
+    return data?.user_has_approved === true;
   } catch (err) {
     log("approvals-error", err.message);
     return false; // on error: don't block review
