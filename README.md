@@ -133,6 +133,29 @@ semanage port -a -t http_port_t -p tcp 9090  # or whichever port you use
 > **Self-hosted GitLab:** If GitLab blocks webhooks to private IPs, go to  
 > **Admin Area → Settings → Network → Outbound requests** and add your host to the allowlist.
 
+## Semantic Memory Enrichment
+
+Before building the review prompt, the relay queries a local [Qdrant](https://qdrant.tech) vector database via [mcporter](https://github.com/openclaw/mcporter) to fetch relevant infrastructure context: project paths, workflow rules, known limitations, and other facts that live outside the repository.
+
+This context is injected into the **trusted section** of the prompt — separate from untrusted MR content — so the agent can make better-informed review decisions without having access to private files.
+
+```
+webhook received
+      │
+      ▼
+semantic.recall("project infra workflow")  ──▶  Qdrant
+      │
+      ▼
+build prompt:
+  [trusted]   GitLab metadata + infra context from Qdrant
+  [untrusted] MR title, description (isolated)
+  [system]    Review instructions
+```
+
+**Requirements:** `mcporter` CLI installed and configured with a `semantic` server pointing to a running Qdrant instance. Set `MCPORTER_BIN` in `.env` (defaults to `/home/user/.npm-global/bin/mcporter`). If mcporter is unavailable, recall is skipped silently — review still runs.
+
+See [OpenClaw semantic memory docs](https://docs.openclaw.ai) for setup.
+
 ## Review Workflow
 
 The agent behaves differently depending on who opened the MR and whether the project is approved for full-cycle mode.
@@ -360,6 +383,27 @@ semanage port -a -t http_port_t -p tcp 9090  # или нужный порт
 
 > **Self-hosted GitLab:** если GitLab блокирует вебхуки на приватные IP, зайди в  
 > **Admin Area → Settings → Network → Outbound requests** и добавь свой хост в allowlist.
+
+## Обогащение промпта через семантическую память
+
+Перед формированием промпта relay делает запрос к локальной векторной БД [Qdrant](https://qdrant.tech) через [mcporter](https://github.com/openclaw/mcporter) — и получает релевантный инфраструктурный контекст: пути проекта, правила workflow, known limitations и другие факты, которые не хранятся в репозитории.
+
+Этот контекст добавляется в **доверенную секцию** промпта — отдельно от untrusted контента МРа — чтобы агент мог делать более осознанное ревью.
+
+```
+получен вебхук
+      │
+      ▼
+semantic.recall("project infra workflow")  ──▶  Qdrant
+      │
+      ▼
+формирование промпта:
+  [trusted]   метаданные GitLab + инфра-контекст из Qdrant
+  [untrusted] title, description МРа (изолировано)
+  [system]    инструкции для ревью
+```
+
+**Требования:** `mcporter` CLI установлен и настроен с сервером `semantic`, указывающим на запущенный Qdrant. Укажи `MCPORTER_BIN` в `.env` (по умолчанию `/home/user/.npm-global/bin/mcporter`). Если mcporter недоступен — recall молча пропускается, ревью продолжается.
 
 ## Workflow ревью
 
