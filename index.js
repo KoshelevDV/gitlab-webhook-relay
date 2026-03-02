@@ -302,18 +302,12 @@ Step 4 — Based on verdict:
       POST ${apiBase}/projects/${project.id}/issues
       Body: { "title": "<short title>", "description": "<detail>", "labels": "design-system,cleanup" }
 
-    4d. Pick the NEXT open issue and implement it using LOCAL git (NOT GitLab API):
-      GET ${apiBase}/projects/${project.id}/issues?state=opened&sort=asc&per_page=10
-      → Take the lowest-numbered open issue not already in progress
-      → Then locally:
-        cd /opt/projects/pvzopenclose
-        git checkout main && git pull origin main
-        git checkout -b feat/<slug>
-        # implement the fix — edit files, run: dotnet build src/PvzOpenClose.Server/PvzOpenClose.Server.csproj
-        export GITLAB_TOKEN=$(cat /opt/projects/gitlab-webhook-relay/.env | grep GITLAB_TOKEN | cut -d= -f2)
-        git push https://project_31_bot_7a2ab8fb659d487161c2e3eda6205bac:${GITLAB_TOKEN}@gitlab.fgdevelop.tech/order-pickup-point/pvzopenclose.git feat/<slug>
-      → Then open MR via API (squash: true)
-      ⚠️ NEVER create the branch via GitLab API — that creates an empty branch with no commits
+    4d. Notify main agent to pick up the next issue:
+      → Fetch open issues: GET ${apiBase}/projects/${project.id}/issues?state=opened&sort=asc&per_page=5
+      → Find the lowest-numbered open issue
+      → Send a Telegram message to the user:
+        "✅ MR !N merged. Next: #X — <issue title>. Starting implementation."
+      ⚠️ DO NOT create branches or MRs yourself — code implementation is done by the main agent session only
 
   IF verdict = ❌ Request Changes (any blocking issue exists):
     → Do NOT call the approve API, do NOT merge
