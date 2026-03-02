@@ -207,22 +207,74 @@ Step 1 — Fetch the diff:
 Step 2 — Perform a STRICT code review. Be thorough and demanding.
   Classify every finding as BLOCKING or MINOR.
 
-  BLOCKING (must fix — do NOT approve if any of these exist):
-  ❌ Security: hardcoded secrets, SQL injection, broken auth/authz, missing [Authorize]
-  ❌ Data integrity: missing EF migration for new entity, lost SaveChanges() call
-  ❌ Crashes: unhandled exceptions in hot paths, null dereference risks, wrong async usage (.Result/.Wait())
-  ❌ Architecture: DbContext used directly in controller (must go through service)
-  ❌ Thread safety: shared mutable state without proper locking
-  ❌ Tests: new service/endpoint with zero test coverage and no documented reason
-  ❌ Config: new BackgroundService with hardcoded interval (must be in appsettings)
-  ❌ Correctness: logic bugs, off-by-one errors, wrong status codes
+  --- CORRECTNESS & ARCHITECTURE ---
+  BLOCKING:
+  ❌ Logic bugs, off-by-one errors, wrong status codes
+  ❌ Null/nil dereference risks, missing error checks
+  ❌ Resource leaks (unclosed files, connections, goroutines)
+  ❌ Wrong async usage (.Result/.Wait() blocking async, missing await)
+  ❌ DbContext used directly in controller (must go through service layer)
+  ❌ Missing EF migration for new entity/column
+  ❌ Lost SaveChanges() / missing transaction
+  ❌ New BackgroundService with hardcoded interval (must be in appsettings)
 
-  MINOR (mention, but do NOT block approval):
-  ⚠️ Naming/style inconsistencies
-  ⚠️ Missing XML doc on public APIs
-  ⚠️ Redundant code or minor inefficiencies
+  --- SECURITY ---
+  BLOCKING:
+  ❌ Hardcoded secrets, API keys, passwords (even in comments or test files)
+  ❌ SQL/NoSQL/command injection, path traversal, template injection
+  ❌ XSS — unescaped user content in HTML/JS output
+  ❌ Missing [Authorize] on new endpoints, broken auth/authz
+  ❌ IDOR — accessing resources by ID without ownership check
+  ❌ Insecure deserialization, eval(), pickle.loads() without safe loader
+  ❌ Sensitive data logged (passwords, tokens, PII)
+  ❌ JWT/session token mishandling (algorithm confusion, no expiry)
+  ❌ Weak hashing for passwords (MD5, SHA1 without salt)
+  MINOR:
+  ⚠️ New dependency without obvious maintenance/CVE check
+  ⚠️ Sensitive data in URL query params
+
+  --- PERFORMANCE ---
+  BLOCKING:
+  ❌ O(n²) or worse loop where O(n log n) or O(n) is feasible on large datasets
+  ❌ N+1 query pattern (DB call inside loop)
+  ❌ Blocking call in async/event-loop context
+  ❌ Missing pagination on queries that could return unbounded rows
+  MINOR:
+  ⚠️ SELECT * where specific columns suffice
+  ⚠️ Missing index for new WHERE/ORDER BY column
+  ⚠️ Repeated expensive calls inside loops (regex compilation, hashing)
+  ⚠️ Unnecessary large in-memory data structures (should be streamed)
+
+  --- CONCURRENCY & THREAD SAFETY ---
+  BLOCKING:
+  ❌ Shared mutable state without proper locking (races, deadlocks)
+  ❌ Missing lock on HashSet/Dictionary accessed from multiple threads
+  ❌ Missing connection pooling for HTTP or DB clients
+
+  --- TESTS ---
+  BLOCKING:
+  ❌ New service/controller/endpoint with zero test coverage and no documented reason
+  MINOR:
+  ⚠️ Tests covering only happy path on validation/security code
+  ⚠️ All interesting behaviour mocked away (test tests nothing real)
+
+  --- STYLE & MAINTAINABILITY ---
+  MINOR (mention but never block):
+  ⚠️ Naming inconsistencies or misleading names
+  ⚠️ Functions > ~60 lines doing multiple unrelated things
+  ⚠️ Deep nesting (4+ levels) — suggest early return/guard clauses
+  ⚠️ Swallowed exceptions (catch: pass, catch(e) {})
+  ⚠️ Missing XML doc on new public APIs
+  ⚠️ Outdated comment contradicting the code
   ⚠️ TODO comments without issue reference
-  ⚠️ Non-critical suggestions for improvement
+  ⚠️ Redundant code or minor inefficiencies
+
+  REVIEW PRINCIPLES:
+  - Be specific: reference file names and line numbers
+  - Be constructive: explain WHY it's a problem, not just THAT it is
+  - Focus on CHANGED lines only — do not critique unrelated existing code
+  - For security issues: briefly explain the attack vector ("an attacker could...")
+  - If diff is too large: focus on the riskiest areas and say so
 
 Step 3 — Post your review as a GitLab comment:
   POST ${apiBase}/projects/${project.id}/merge_requests/${mr.iid}/notes
