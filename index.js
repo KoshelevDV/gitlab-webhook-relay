@@ -288,18 +288,34 @@ Step 3 — Post your review as a GitLab comment:
 
 Step 4 — Based on verdict:
   IF verdict = ✅ Approve (zero blocking issues):
-    → Call GitLab approve API:
+    4a. Approve:
       POST ${apiBase}/projects/${project.id}/merge_requests/${mr.iid}/approve
       Header: PRIVATE-TOKEN: <your-gitlab-token>
-      Body: {} (empty JSON object)
-    → Notify user with the approve confirmation
+      Body: {}
+
+    4b. Merge immediately (squash):
+      PUT ${apiBase}/projects/${project.id}/merge_requests/${mr.iid}/merge
+      Header: PRIVATE-TOKEN: <your-gitlab-token>
+      Body: { "squash": true, "should_remove_source_branch": true }
+
+    4c. Create GitLab issues for any MINOR findings (one issue per finding):
+      POST ${apiBase}/projects/${project.id}/issues
+      Body: { "title": "<short title>", "description": "<detail>", "labels": "design-system,cleanup" }
+
+    4d. Pick the NEXT open issue from the project and start working on it:
+      GET ${apiBase}/projects/${project.id}/issues?state=opened&order_by=iid&sort=asc&per_page=5
+      → Take the lowest-numbered open issue not already in progress
+      → Create a branch feat/<slug>, implement the fix, push, open a new MR (squash: true)
 
   IF verdict = ❌ Request Changes (any blocking issue exists):
-    → Do NOT call the approve API
-    → If full-cycle mode: apply fixes to the branch, push, wait for re-review
-    → Notify user about blocking issues
+    → Do NOT call the approve API, do NOT merge
+    → If full-cycle mode: fix the blocking issues on the branch, push, re-trigger review
+    → If review-only mode: post the findings as a comment and notify the user
 
-Step 5 — Send a brief summary to the user (Telegram).
+Step 5 — Send a brief summary to the user (Telegram):
+  - MR !N: ✅ merged / ❌ changes requested
+  - Issues created for minor findings (if any)
+  - Next issue being worked on (if approved & merged)
 `.trim();
 }
 
