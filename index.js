@@ -299,8 +299,12 @@ Step 4 — Based on verdict:
     → Do NOT call the approve API
     → Post findings as a comment (already done in Step 3)
 
-Step 5 — Send a one-line summary to the user (Telegram):
-  ✅ MR !N approved — or — ❌ MR !N needs changes: <blocking issue count> blocking
+Step 5 — Notify main agent via Telegram so it can continue the cycle:
+  After ✅ approve: send Telegram message to the user with EXACTLY this format:
+    "🔔 MR !N approved. Merge and continue cycle."
+  After ❌ request changes: send:
+    "🔔 MR !N needs changes: <summary of blocking issues>"
+  This message triggers the main agent session to merge + start next issue.
 `.trim();
 }
 
