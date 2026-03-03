@@ -299,12 +299,13 @@ Step 4 — Based on verdict:
     → Do NOT call the approve API
     → Post findings as a comment (already done in Step 3)
 
-Step 5 — Notify main agent via Telegram so it can continue the cycle:
-  After ✅ approve: send Telegram message to the user with EXACTLY this format:
+Step 5 — End your reply with a notification line (DO NOT call any message tool):
+  After ✅ approve, the VERY LAST LINE of your reply must be EXACTLY:
     "🔔 MR !N approved. Merge and continue cycle."
-  After ❌ request changes: send:
-    "🔔 MR !N needs changes: <summary of blocking issues>"
-  This message triggers the main agent session to merge + start next issue.
+  After ❌ request changes, the VERY LAST LINE must be:
+    "🔔 MR !N needs changes: <one-line summary of blocking issues>"
+  (Replace !N with the actual MR number.)
+  This line is delivered automatically via the hook delivery mechanism — no tool call needed.
 `.trim();
 }
 
