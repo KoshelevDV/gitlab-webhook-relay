@@ -292,12 +292,23 @@ Step 4 — Based on verdict:
       POST ${apiBase}/projects/${project.id}/merge_requests/${mr.iid}/approve
       Header: PRIVATE-TOKEN: <your-gitlab-token>
       Body: {}
-    → That is ALL. Do NOT merge, do NOT create issues, do NOT create branches.
-      The main agent handles everything after approval.
+
+    → For EACH minor finding from Step 2, create a GitLab issue (tech debt):
+      POST ${apiBase}/projects/${project.id}/issues
+      Body: {
+        "title": "<short descriptive title>",
+        "description": "Найдено при ревью MR !N (${mr.source_branch})\\n\\n<explanation of the issue, why it matters, suggested fix>",
+        "labels": "tech-debt,review-finding"
+      }
+      Create one issue per finding. Skip if no minor findings.
+
+    → That is ALL. Do NOT merge, do NOT create branches.
+      The main agent handles merge and next issue.
 
   IF verdict = ❌ Request Changes (any blocking issue exists):
     → Do NOT call the approve API
     → Post findings as a comment (already done in Step 3)
+    → Do NOT create issues for minor findings when blocking — blocking fixes come first.
 
 Step 5 — End your reply with a notification line (DO NOT call any message tool):
   After ✅ approve, the VERY LAST LINE of your reply must be EXACTLY:
