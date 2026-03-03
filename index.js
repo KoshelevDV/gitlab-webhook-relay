@@ -324,7 +324,7 @@ function forwardToOpenClaw(message) {
     message,
     name: "GitLab MR Review",
     deliver: true,
-    ...(config.telegramChatId ? { channel: "telegram", to: config.telegramChatId } : {}),
+    ...(config.telegramChatId ? { channel: "telegram", to: `telegram:${config.telegramChatId}` } : {}),
     timeoutSeconds: config.timeoutSeconds,
   });
 
